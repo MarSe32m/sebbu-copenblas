@@ -1,0 +1,8 @@
+For OpenBLAS, download the published artifacts from GitHub. Then do the following
+1. Copy the libopenblas.def file in the lib directory as openblas.def
+2. At the top of the openblas.def file add above EXPORTS: LIBRARY openblas.dll
+3. Run the command: lib /def:openblas.def /machine:x64 /out:openblas.lib
+4. Rename the DLL file in bin from libopenblas.dll to openblas.dll
+5. Copy the import library (openblas.lib) and DLL (openblas.dll) into the folder COpenBLAS.artifactbundle/lib/windows
+
+TODO: What about ARM support? OpenBLAS seems to vend truly static libraries on ARM?

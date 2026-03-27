@@ -1,0 +1,4 @@
+module COpenBLAS {
+    header "include.h"
+    export *
+}
