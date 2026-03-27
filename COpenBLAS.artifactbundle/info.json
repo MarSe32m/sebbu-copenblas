@@ -3,7 +3,7 @@
     "artifacts": {
         "COpenBLAS": {
             "type": "staticLibrary",
-            "version": "0.3.31",
+            "version": "0.3.32",
             "variants": [
                 {
                     "path": "lib/linux/libopenblas-x86_64-gnu.a",
@@ -33,7 +33,7 @@
         },
         "COpenBLAS.DLL": {
             "type": "experimentalWindowsDLL",
-            "version": "0.3.31",
+            "version": "0.3.32",
             "variants": [
                 {
                     "path": "lib/windows/openblas.dll",
