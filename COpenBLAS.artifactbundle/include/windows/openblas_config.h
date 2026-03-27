@@ -23,7 +23,7 @@
 #define OPENBLAS_CLOCAL_BUFFER_SIZE 8192
 #define OPENBLAS_ZLOCAL_BUFFER_SIZE 8192
 #define OPENBLAS_GEMM_MULTITHREAD_THRESHOLD 4
-#define OPENBLAS_VERSION " OpenBLAS 0.3.31 "
+#define OPENBLAS_VERSION " OpenBLAS 0.3.32 "
 /*This is only for "make install" target.*/
 
 #if defined(OPENBLAS_OS_WINNT) || defined(OPENBLAS_OS_CYGWIN_NT) || defined(OPENBLAS_OS_INTERIX)
@@ -65,8 +65,12 @@ typedef unsigned long BLASULONG;
 typedef uint16_t bfloat16;
 #endif
 
-#if defined(__GNUC__) && (__GNUC__ >= 12)
+#if defined(__GNUC__) && (__GNUC__ > 12)
+#if defined(OPENBLAS_ARCH_POWER)
+typedef bfloat16 hfloat16;
+#else
 typedef _Float16 hfloat16;
+#endif
 #else
 #include <stdint.h>
 typedef uint16_t hfloat16;
