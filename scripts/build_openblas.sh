@@ -31,7 +31,7 @@ x86_64-linux-musl-gcc --version
 #aarch64-linux-musl-gcc --version
 
 # Clone OpenBLAS
-OPENBLAS_VERSION="0.3.31"
+OPENBLAS_VERSION="0.3.32"
 OPENBLAS_REPO="https://github.com/OpenMathLib/OpenBLAS.git"
 OPENBLAS_TAG="v$OPENBLAS_VERSION"
 
