@@ -8,6 +8,12 @@ xcuserdata/
 ## Obj-C/Swift specific
 *.hmap
 
+.vscode
+.sourcekit-lsp
+
+Dockerfile.openblas-glibc
+Dockerfile.openblas-musl
+
 ## App packaging
 *.ipa
 *.dSYM.zip

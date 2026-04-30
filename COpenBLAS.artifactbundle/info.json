@@ -3,40 +3,56 @@
     "artifacts": {
         "COpenBLAS": {
             "type": "staticLibrary",
-            "version": "0.3.32",
+            "version": "0.3.33",
             "variants": [
                 {
-                    "path": "lib/linux/libopenblas-x86_64-gnu.a",
+                    "path": "openblas-linux-x86_64-glibc2.34/lib/libopenblas.a",
                     "supportedTriples": ["x86_64-unknown-linux-gnu"],
                     "staticLibraryMetadata": {
-                        "headerPaths": ["include/linux"],
-                        "moduleMapPath": "include/linux/module.modulemap"
+                        "headerPaths": ["openblas-linux-x86_64-glibc2.34/include"],
+                        "moduleMapPath": "openblas-linux-x86_64-glibc2.34/include/module.modulemap"
                     }
                 },
                 {
-                    "path": "lib/linux/libopenblas-x86_64-musl.a",
+                    "path": "openblas-linux-aarch64-glibc2.34/lib/libopenblas.a",
+                    "supportedTriples": ["aarch64-unknown-linux-gnu"],
+                    "staticLibraryMetadata": {
+                        "headerPaths": ["openblas-linux-aarch64-glibc2.34/include"],
+                        "moduleMapPath": "openblas-linux-aarch64-glibc2.34/include/module.modulemap"
+                    }
+                },
+                {
+                    "path": "openblas-linux-x86_64-musl1.2/lib/libopenblas.a",
                     "supportedTriples": ["x86_64-swift-linux-musl"],
                     "staticLibraryMetadata": {
-                        "headerPaths": ["include/linux"],
-                        "moduleMapPath": "include/linux/module.modulemap"
+                        "headerPaths": ["openblas-linux-x86_64-musl1.2/include"],
+                        "moduleMapPath": "openblas-linux-x86_64-musl1.2/include/module.modulemap"
                     }
                 },
                 {
-                    "path": "lib/windows/openblas.lib",
+                    "path": "openblas-linux-aarch64-musl1.2/lib/libopenblas.a",
+                    "supportedTriples": ["aarch64-swift-linux-musl"],
+                    "staticLibraryMetadata": {
+                        "headerPaths": ["openblas-linux-aarch64-musl1.2/include"],
+                        "moduleMapPath": "openblas-linux-aarch64-musl1.2/include/module.modulemap"
+                    }
+                },
+                {
+                    "path": "openblas-windows-x86_64/lib/openblas.lib",
                     "supportedTriples": ["x86_64-unknown-windows-msvc"],
                     "staticLibraryMetadata": {
-                        "headerPaths": ["include/windows"],
-                        "moduleMapPath": "include/windows/module.modulemap"
+                        "headerPaths": ["openblas-windows-x86_64/include"],
+                        "moduleMapPath": "openblas-windows-x86_64/include/module.modulemap"
                     }
                 }
             ]
         },
         "COpenBLAS.DLL": {
             "type": "experimentalWindowsDLL",
-            "version": "0.3.32",
+            "version": "0.3.33",
             "variants": [
                 {
-                    "path": "lib/windows/openblas.dll",
+                    "path": "openblas-windows-x86_64/lib/openblas.dll",
                     "supportedTriples": [
                         "x86_64-unknown-windows-msvc"
                     ]
