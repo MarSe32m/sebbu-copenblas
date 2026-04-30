@@ -11,15 +11,23 @@ let package = Package(
         ),
     ],
     targets: [
+        .target(
+            name: "COpenBLAS",
+            dependencies: ["_COpenBLAS"],
+            path: "Sources/COpenBLAS",
+            linkerSettings: [
+                .linkedLibrary("m", .when(platforms: [.linux])),
+                .linkedLibrary("pthread", .when(platforms: [.linux])),
+                .linkedLibrary("dl", .when(platforms: [.linux])),
+            ]
+        ),
         .binaryTarget(
-            name: "COpenBLAS", 
+            name: "_COpenBLAS",
             path: "COpenBLAS.artifactbundle"
         ),
         .executableTarget(
             name: "Development",
-            dependencies: [
-                .target(name: "COpenBLAS", condition: .when(platforms: [.linux, .windows]))
-            ]
+            dependencies: [.target(name: "COpenBLAS", condition: .when(platforms: [.linux, .windows]))]
         )
     ]
 )

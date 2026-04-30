@@ -228,7 +228,7 @@ cat > "$OUT_DIR/include/include.h" << 'EOF'
 EOF
 
 cat > "$OUT_DIR/include/module.modulemap" <<'EOF'
-module COpenBLAS {
+module _COpenBLAS {
   header "include.h"
   export *
 }

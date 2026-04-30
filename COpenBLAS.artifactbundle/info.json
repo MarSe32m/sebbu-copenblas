@@ -1,7 +1,7 @@
 {
     "schemaVersion": "1.0",
     "artifacts": {
-        "COpenBLAS": {
+        "_COpenBLAS": {
             "type": "staticLibrary",
             "version": "0.3.33",
             "variants": [
@@ -47,7 +47,7 @@
                 }
             ]
         },
-        "COpenBLAS.DLL": {
+        "_COpenBLAS.DLL": {
             "type": "experimentalWindowsDLL",
             "version": "0.3.33",
             "variants": [

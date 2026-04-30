@@ -248,7 +248,7 @@ DOCKERFILE
 EOF
 
   cat > "$out_dir/include/module.modulemap" <<'EOF'
-module COpenBLAS {
+module _COpenBLAS {
   header "include.h"
   export *
 }
