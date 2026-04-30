@@ -14,6 +14,12 @@ let package = Package(
         .binaryTarget(
             name: "COpenBLAS", 
             path: "COpenBLAS.artifactbundle"
+        ),
+        .executableTarget(
+            name: "Development",
+            dependencies: [
+                .target(name: "COpenBLAS", condition: .when(platforms: [.linux, .windows]))
+            ]
         )
     ]
 )
