@@ -1,7 +1,7 @@
 # sebbu-copenblas
-# COpenBLAS 0.3.34
+# COpenBLAS
 
-Prebuilt OpenBLAS `v0.3.34` static libraries for SwiftPM.
+Prebuilt OpenBLAS static libraries for SwiftPM.
 
 | Supported Swift target triples |
 | --- |
