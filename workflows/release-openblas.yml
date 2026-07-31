@@ -1,0 +1,387 @@
+name: Release OpenBLAS
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: OpenBLAS version without the leading v (for example 0.3.34)
+        required: true
+        type: string
+      publish:
+        description: Commit Package.swift, tag the version, and publish a GitHub release
+        required: true
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+concurrency:
+  group: openblas-release-${{ inputs.version }}
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    name: Validate release request
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 1
+
+      - name: Validate version, branch, and tags
+        shell: bash
+        env:
+          VERSION: ${{ inputs.version }}
+          PUBLISH: ${{ inputs.publish }}
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+
+          if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::Version must look like 0.3.34 (without a leading v)."
+            exit 1
+          fi
+
+          if ! git ls-remote --exit-code --tags \
+            https://github.com/OpenMathLib/OpenBLAS.git \
+            "refs/tags/v${VERSION}" >/dev/null
+          then
+            echo "::error::OpenBLAS tag v${VERSION} does not exist upstream."
+            exit 1
+          fi
+
+          if [[ "$PUBLISH" == "true" && "$REF_NAME" != "main" ]]; then
+            echo "::error::Published releases must be dispatched from main."
+            exit 1
+          fi
+
+          if [[ "$PUBLISH" == "true" ]] &&
+            git ls-remote --exit-code --tags origin "refs/tags/${VERSION}" >/dev/null 2>&1
+          then
+            echo "::notice::Package tag ${VERSION} already exists; the publish job will only allow an idempotent retry."
+          fi
+
+  build-linux:
+    name: Build ${{ matrix.triple }}
+    needs: validate
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - id: linux-x86_64-gnu
+            runner: ubuntu-24.04
+            image: rockylinux:9
+            target: GENERIC
+            dynamic_arch: "ON"
+            variant: openblas-linux-x86_64-glibc2.34
+            triple: x86_64-unknown-linux-gnu
+          - id: linux-aarch64-gnu
+            runner: ubuntu-24.04-arm
+            image: rockylinux:9
+            target: ARMV8
+            dynamic_arch: "OFF"
+            variant: openblas-linux-aarch64-glibc2.34
+            triple: aarch64-unknown-linux-gnu
+          - id: linux-x86_64-musl
+            runner: ubuntu-24.04
+            image: alpine:3.22
+            target: GENERIC
+            dynamic_arch: "ON"
+            variant: openblas-linux-x86_64-musl1.2
+            triple: x86_64-swift-linux-musl
+          - id: linux-aarch64-musl
+            runner: ubuntu-24.04-arm
+            image: alpine:3.22
+            target: ARMV8
+            dynamic_arch: "OFF"
+            variant: openblas-linux-aarch64-musl1.2
+            triple: aarch64-swift-linux-musl
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Build in the baseline container
+        shell: bash
+        env:
+          OPENBLAS_VERSION: v${{ inputs.version }}
+          OPENBLAS_TARGET: ${{ matrix.target }}
+          DYNAMIC_ARCH: ${{ matrix.dynamic_arch }}
+          ARTIFACT_VARIANT: ${{ matrix.variant }}
+          ARTIFACT_BUNDLE_DIR: /workspace/payload
+          BUILD_IMAGE: ${{ matrix.image }}
+        run: |
+          set -euo pipefail
+          BUILD_JOBS="$(getconf _NPROCESSORS_ONLN 2>/dev/null || echo 1)"
+          export BUILD_JOBS
+
+          docker run --rm \
+            --volume "${GITHUB_WORKSPACE}:/workspace" \
+            --workdir /workspace \
+            --env OPENBLAS_VERSION \
+            --env OPENBLAS_TARGET \
+            --env DYNAMIC_ARCH \
+            --env ARTIFACT_VARIANT \
+            --env ARTIFACT_BUNDLE_DIR \
+            --env BUILD_JOBS \
+            --env RUNNER_TEMP=/tmp \
+            "$BUILD_IMAGE" \
+            /bin/sh -ec '
+              if command -v apk >/dev/null 2>&1; then
+                apk add --no-cache bash build-base cmake ninja git perl linux-headers
+              else
+                dnf -y install gcc gcc-c++ make cmake git perl
+                dnf clean all
+              fi
+              exec bash scripts/build-linux.sh
+            '
+
+          sudo chown -R "$(id -u):$(id -g)" "${GITHUB_WORKSPACE}/payload"
+
+      - name: Upload staged payload
+        uses: actions/upload-artifact@v7
+        with:
+          name: payload-${{ matrix.id }}
+          path: payload/
+          if-no-files-found: error
+          retention-days: 1
+
+  build-windows:
+    name: Build ${{ matrix.triple }}
+    needs: validate
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - id: windows-x86_64
+            script: build-windows-x86_64.bat
+            triple: x86_64-unknown-windows-msvc
+          - id: windows-aarch64
+            script: build-windows-aarch64.bat
+            triple: aarch64-unknown-windows-msvc
+    runs-on: windows-2025-vs2026
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Build with Visual Studio 2026
+        shell: cmd
+        env:
+          OPENBLAS_VERSION: v${{ inputs.version }}
+          ARTIFACT_BUNDLE_DIR: ${{ github.workspace }}\payload
+        run: |
+          set "BUILD_JOBS=%NUMBER_OF_PROCESSORS%"
+          call "scripts\${{ matrix.script }}"
+          if errorlevel 1 exit /b 1
+
+      - name: Upload staged payload
+        uses: actions/upload-artifact@v7
+        with:
+          name: payload-${{ matrix.id }}
+          path: payload/
+          if-no-files-found: error
+          retention-days: 1
+
+  package:
+    name: Package SwiftPM release assets
+    needs:
+      - build-linux
+      - build-windows
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Download all build payloads
+        uses: actions/download-artifact@v8
+        with:
+          pattern: payload-*
+          path: payload
+          merge-multiple: true
+
+      - name: Create the multi-triple artifact bundle
+        shell: bash
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          python3 scripts/package-release.py \
+            --version "$VERSION" \
+            --payload-root payload \
+            --dist-dir prepared/release-assets \
+            --package-manifest Package.swift \
+            --output-package-manifest prepared/Package.swift \
+            --artifact-manifest-template info.json
+
+      - name: Verify checksums and Package.swift
+        shell: bash
+        run: |
+          set -euo pipefail
+          (
+            cd prepared/release-assets
+            sha256sum --check SHA256SUMS
+          )
+
+          bundle="prepared/release-assets/COpenBLAS.artifactbundle.zip"
+          bundle_checksum="$(sha256sum "$bundle" | awk '{print $1}')"
+          grep --fixed-strings \
+            "url: \"https://github.com/MarSe32m/sebbu-copenblas/releases/download/${{ inputs.version }}/COpenBLAS.artifactbundle.zip\"" \
+            prepared/Package.swift
+          grep --fixed-strings \
+            "checksum: \"$bundle_checksum\"" \
+            prepared/Package.swift
+
+          python3 - "$bundle" "${{ inputs.version }}" <<'PY'
+          import json
+          import sys
+          import zipfile
+
+          bundle_path, expected_version = sys.argv[1:]
+          manifest_path = "COpenBLAS.artifactbundle/info.json"
+          expected_variants = {
+              "openblas-linux-aarch64-glibc2.34",
+              "openblas-linux-aarch64-musl1.2",
+              "openblas-linux-x86_64-glibc2.34",
+              "openblas-linux-x86_64-musl1.2",
+              "openblas-windows-aarch64",
+              "openblas-windows-x86_64",
+          }
+
+          with zipfile.ZipFile(bundle_path) as archive:
+              names = archive.namelist()
+              manifest = json.loads(archive.read(manifest_path))
+
+          version = manifest["artifacts"]["_COpenBLAS"]["version"]
+          if version != expected_version:
+              raise SystemExit(
+                  f"info.json version is {version!r}, expected {expected_version!r}"
+              )
+
+          present_variants = {
+              name.split("/", 2)[1]
+              for name in names
+              if name.startswith("COpenBLAS.artifactbundle/")
+              and name.count("/") >= 2
+              and name != manifest_path
+          }
+          if present_variants != expected_variants:
+              raise SystemExit(
+                  "Artifact-bundle payload directories differ from the expected set: "
+                  f"{sorted(present_variants)}"
+              )
+          PY
+
+          cp prepared/Package.swift Package.swift
+          swift package dump-package >/dev/null
+
+      - name: Upload prepared release
+        uses: actions/upload-artifact@v7
+        with:
+          name: prepared-release-${{ inputs.version }}
+          path: prepared/
+          if-no-files-found: error
+          retention-days: 3
+
+  publish:
+    name: Commit, tag, and publish
+    if: ${{ inputs.publish && github.ref == 'refs/heads/main' }}
+    needs: package
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: main
+          fetch-depth: 1
+
+      - name: Download prepared release
+        uses: actions/download-artifact@v8
+        with:
+          name: prepared-release-${{ inputs.version }}
+          path: prepared
+
+      - name: Create the release commit and tag
+        shell: bash
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          cp prepared/Package.swift Package.swift
+          git rm -r --ignore-unmatch COpenBLAS.artifactbundle
+          git add Package.swift
+
+          remote_tag_commit="$(
+            git ls-remote origin "refs/tags/${VERSION}^{}" |
+              awk 'NR == 1 { print $1 }'
+          )"
+          if [[ -z "$remote_tag_commit" ]]; then
+            remote_tag_commit="$(
+              git ls-remote origin "refs/tags/${VERSION}" |
+                awk 'NR == 1 { print $1 }'
+            )"
+          fi
+
+          if [[ -n "$remote_tag_commit" ]]; then
+            if ! git diff --cached --quiet; then
+              echo "::error::Tag ${VERSION} exists, but the prepared manifest differs from main."
+              exit 1
+            fi
+            if [[ "$remote_tag_commit" != "$(git rev-parse HEAD)" ]]; then
+              echo "::error::Tag ${VERSION} does not point to the current main commit."
+              exit 1
+            fi
+            echo "Tag ${VERSION} and its release commit already exist; continuing an idempotent release retry."
+            exit 0
+          fi
+
+          if git diff --cached --quiet; then
+            echo "::error::The release would not change Package.swift or remove a local artifact."
+            exit 1
+          fi
+
+          git commit -m "Release OpenBLAS ${VERSION} [skip ci]"
+          git tag --annotate "$VERSION" --message "OpenBLAS ${VERSION}"
+
+          # The atomic push prevents a tag-only or branch-only partial update.
+          git push --atomic origin HEAD:main "refs/tags/${VERSION}"
+
+      - name: Upload and publish GitHub release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+
+          release_is_draft="$(
+            gh release view "$VERSION" --json isDraft --jq .isDraft 2>/dev/null ||
+              true
+          )"
+
+          if [[ "$release_is_draft" == "false" ]]; then
+            echo "Release ${VERSION} is already published."
+            exit 0
+          elif [[ "$release_is_draft" == "true" ]]; then
+            gh release upload "$VERSION" \
+              prepared/release-assets/COpenBLAS.artifactbundle.zip \
+              prepared/release-assets/BUILD-METADATA.json \
+              prepared/release-assets/SHA256SUMS \
+              --clobber
+            gh release edit "$VERSION" \
+              --title "OpenBLAS ${VERSION}" \
+              --notes-file prepared/release-assets/RELEASE_NOTES.md
+          else
+            gh release create "$VERSION" \
+              prepared/release-assets/COpenBLAS.artifactbundle.zip \
+              prepared/release-assets/BUILD-METADATA.json \
+              prepared/release-assets/SHA256SUMS \
+              --verify-tag \
+              --draft \
+              --title "OpenBLAS ${VERSION}" \
+              --notes-file prepared/release-assets/RELEASE_NOTES.md
+          fi
+
+          gh release edit "$VERSION" --draft=false --latest

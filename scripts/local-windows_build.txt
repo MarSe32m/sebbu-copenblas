@@ -1,0 +1,10 @@
+To build the artifacts for x86_64-unknown-windows-msvc and aarch64-unknown-windows-msvc,
+you need to install Visual Studio 2026 with the components
+1. MSVC Build Tools for x64/x86 (Latest)
+2. MSVC Build Tools for ARM64/ARM64EC (Latest)
+3. A recent Windows 11 SDK
+4. C++ Clang Compiler for Windows
+5. C++ CMake tools for Windows
+Some of these are installed due to installing Swift already. Then navigate to the scripts directory and run each of the scripts 
+build-windows-x86_64.bat and build-windows-aarch64.bat one by one. NOTE: It's important that you run the scripts in the 
+scripts directory as the current directory!

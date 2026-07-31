@@ -1,0 +1,59 @@
+{
+    "schemaVersion": "1.0",
+    "artifacts": {
+        "_COpenBLAS": {
+            "type": "staticLibrary",
+            "version": "0.3.34",
+            "variants": [
+                {
+                    "path": "openblas-linux-x86_64-glibc2.34/lib/libopenblas.a",
+                    "supportedTriples": ["x86_64-unknown-linux-gnu"],
+                    "staticLibraryMetadata": {
+                        "headerPaths": ["openblas-linux-x86_64-glibc2.34/include"],
+                        "moduleMapPath": "openblas-linux-x86_64-glibc2.34/include/module.modulemap"
+                    }
+                },
+                {
+                    "path": "openblas-linux-aarch64-glibc2.34/lib/libopenblas.a",
+                    "supportedTriples": ["aarch64-unknown-linux-gnu"],
+                    "staticLibraryMetadata": {
+                        "headerPaths": ["openblas-linux-aarch64-glibc2.34/include"],
+                        "moduleMapPath": "openblas-linux-aarch64-glibc2.34/include/module.modulemap"
+                    }
+                },
+                {
+                    "path": "openblas-linux-x86_64-musl1.2/lib/libopenblas.a",
+                    "supportedTriples": ["x86_64-swift-linux-musl"],
+                    "staticLibraryMetadata": {
+                        "headerPaths": ["openblas-linux-x86_64-musl1.2/include"],
+                        "moduleMapPath": "openblas-linux-x86_64-musl1.2/include/module.modulemap"
+                    }
+                },
+                {
+                    "path": "openblas-linux-aarch64-musl1.2/lib/libopenblas.a",
+                    "supportedTriples": ["aarch64-swift-linux-musl"],
+                    "staticLibraryMetadata": {
+                        "headerPaths": ["openblas-linux-aarch64-musl1.2/include"],
+                        "moduleMapPath": "openblas-linux-aarch64-musl1.2/include/module.modulemap"
+                    }
+                },
+                {
+                    "path": "openblas-windows-x86_64/lib/openblas.lib",
+                    "supportedTriples": ["x86_64-unknown-windows-msvc"],
+                    "staticLibraryMetadata": {
+                        "headerPaths": ["openblas-windows-x86_64/include"],
+                        "moduleMapPath": "openblas-windows-x86_64/include/module.modulemap"
+                    }
+                },
+                {
+                    "path": "openblas-windows-aarch64/lib/openblas.lib",
+                    "supportedTriples": ["aarch64-unknown-windows-msvc"],
+                    "staticLibraryMetadata": {
+                        "headerPaths": ["openblas-windows-aarch64/include"],
+                        "moduleMapPath": "openblas-windows-aarch64/include/module.modulemap"
+                    }
+                }
+            ]
+        }
+    }
+}

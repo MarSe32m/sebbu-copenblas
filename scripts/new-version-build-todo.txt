@@ -1,0 +1,10 @@
+Manually creating release
+1. Run Build OpenBLAS workflow for <version>
+2. Download artifacts and drop them into COpenBLAS.artifactbundle
+3. Update info.json version
+4. Update version in README.md 
+5. Push changes to main
+6. Create a GitHub release
+
+Using GitHub to automatically create release
+1. Run Release OpenBLAS workflow for <version>

@@ -1,0 +1,165 @@
+name: Build OpenBLAS
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: OpenBLAS version without the leading v (for example 0.3.34)
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: openblas-build-${{ inputs.version }}
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    name: Validate build request
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 1
+
+      - name: Validate version, branch, and tags
+        shell: bash
+        env:
+          VERSION: ${{ inputs.version }}
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+
+          if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::Version must look like 0.3.34 (without a leading v)."
+            exit 1
+          fi
+
+          if ! git ls-remote --exit-code --tags \
+            https://github.com/OpenMathLib/OpenBLAS.git \
+            "refs/tags/v${VERSION}" >/dev/null
+          then
+            echo "::error::OpenBLAS tag v${VERSION} does not exist upstream."
+            exit 1
+          fi
+
+  build-linux:
+    name: Build ${{ matrix.triple }}
+    needs: validate
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - id: linux-x86_64-gnu
+            runner: ubuntu-24.04
+            image: rockylinux:9
+            target: GENERIC
+            dynamic_arch: "ON"
+            variant: openblas-linux-x86_64-glibc2.34
+            triple: x86_64-unknown-linux-gnu
+          - id: linux-aarch64-gnu
+            runner: ubuntu-24.04-arm
+            image: rockylinux:9
+            target: ARMV8
+            dynamic_arch: "OFF"
+            variant: openblas-linux-aarch64-glibc2.34
+            triple: aarch64-unknown-linux-gnu
+          - id: linux-x86_64-musl
+            runner: ubuntu-24.04
+            image: alpine:3.22
+            target: GENERIC
+            dynamic_arch: "ON"
+            variant: openblas-linux-x86_64-musl1.2
+            triple: x86_64-swift-linux-musl
+          - id: linux-aarch64-musl
+            runner: ubuntu-24.04-arm
+            image: alpine:3.22
+            target: ARMV8
+            dynamic_arch: "OFF"
+            variant: openblas-linux-aarch64-musl1.2
+            triple: aarch64-swift-linux-musl
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Build in the baseline container
+        shell: bash
+        env:
+          OPENBLAS_VERSION: v${{ inputs.version }}
+          OPENBLAS_TARGET: ${{ matrix.target }}
+          DYNAMIC_ARCH: ${{ matrix.dynamic_arch }}
+          ARTIFACT_VARIANT: ${{ matrix.variant }}
+          ARTIFACT_BUNDLE_DIR: /workspace/payload
+          BUILD_IMAGE: ${{ matrix.image }}
+        run: |
+          set -euo pipefail
+          BUILD_JOBS="$(getconf _NPROCESSORS_ONLN 2>/dev/null || echo 1)"
+          export BUILD_JOBS
+
+          docker run --rm \
+            --volume "${GITHUB_WORKSPACE}:/workspace" \
+            --workdir /workspace \
+            --env OPENBLAS_VERSION \
+            --env OPENBLAS_TARGET \
+            --env DYNAMIC_ARCH \
+            --env ARTIFACT_VARIANT \
+            --env ARTIFACT_BUNDLE_DIR \
+            --env BUILD_JOBS \
+            --env RUNNER_TEMP=/tmp \
+            "$BUILD_IMAGE" \
+            /bin/sh -ec '
+              if command -v apk >/dev/null 2>&1; then
+                apk add --no-cache bash build-base cmake ninja git perl linux-headers
+              else
+                dnf -y install gcc gcc-c++ make cmake git perl
+                dnf clean all
+              fi
+              exec bash scripts/build-linux.sh
+            '
+
+          sudo chown -R "$(id -u):$(id -g)" "${GITHUB_WORKSPACE}/payload"
+
+      - name: Upload staged payload
+        uses: actions/upload-artifact@v7
+        with:
+          name: payload-${{ matrix.id }}
+          path: payload/
+          if-no-files-found: error
+          retention-days: 1
+
+  build-windows:
+    name: Build ${{ matrix.triple }}
+    needs: validate
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - id: windows-x86_64
+            script: build-windows-x86_64.bat
+            triple: x86_64-unknown-windows-msvc
+          - id: windows-aarch64
+            script: build-windows-aarch64.bat
+            triple: aarch64-unknown-windows-msvc
+    runs-on: windows-2025-vs2026
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Build with Visual Studio 2026
+        shell: cmd
+        env:
+          OPENBLAS_VERSION: v${{ inputs.version }}
+          ARTIFACT_BUNDLE_DIR: ${{ github.workspace }}\payload
+        run: |
+          set "BUILD_JOBS=%NUMBER_OF_PROCESSORS%"
+          call "scripts\${{ matrix.script }}"
+          if errorlevel 1 exit /b 1
+
+      - name: Upload staged payload
+        uses: actions/upload-artifact@v7
+        with:
+          name: payload-${{ matrix.id }}
+          path: payload/
+          if-no-files-found: error
+          retention-days: 1
