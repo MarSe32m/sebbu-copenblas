@@ -22,9 +22,9 @@ let package = Package(
             ]
         ),
         .binaryTarget(
-            name: "_COpenBLAS", 
-            url: "https://github.com/MarSe32m/sebbu-copenblas/releases/download/0.3.34/COpenBLAS.artifactbundle.zip", 
-            checksum: "803439d4963a8206b938178c62822048ce9bd36e0a3ef1eb400a104aa4a27506"
+            name: "_COpenBLAS",
+            url: "https://github.com/MarSe32m/sebbu-copenblas/releases/download/0.3.34/COpenBLAS.artifactbundle.zip",
+            checksum: "36420d247c739f41629e37150c541c01baf096a8508d2e0928edb105e8fbb3f5"
         ),
         .executableTarget(
             name: "Development",
