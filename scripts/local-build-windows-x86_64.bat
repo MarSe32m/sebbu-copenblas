@@ -2,7 +2,8 @@
 setlocal EnableExtensions
 
 rem Build settings
-set "OPENBLAS_VERSION=v0.3.34"
+set "OPENBLAS_VERSION=v0.3.35"
+if not defined OPENBLAS_MAX_STACK_ALLOC set "OPENBLAS_MAX_STACK_ALLOC=2048"
 set "BUILD_JOBS=16"
 set "BUILD_DIRECTORY=build-x86_64-nofortran"
 
@@ -66,9 +67,13 @@ set "SOURCE_PUSHED=1"
 
 set "INSTALL_DIRECTORY=%CD%\install-x86_64-nofortran"
 
+rem OpenBLAS ignores its MAX_STACK_ALLOC CMake cache setting on Windows, so
+rem pass it directly to clang-cl. clang-cl supports the C99 VLA used by the
+rem OpenBLAS stack-workspace implementation.
 cmake -S . -B "%BUILD_DIRECTORY%" -G Ninja ^
     "-DCMAKE_BUILD_TYPE=Release" ^
     "-DCMAKE_C_COMPILER=clang-cl" ^
+    "-DCMAKE_C_FLAGS=/DMAX_STACK_ALLOC=%OPENBLAS_MAX_STACK_ALLOC%" ^
     "-DCMAKE_LINKER=lld-link" ^
     "-DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreadedDLL" ^
     "-DTARGET=GENERIC" ^
@@ -90,6 +95,12 @@ cmake -S . -B "%BUILD_DIRECTORY%" -G Ninja ^
     "-DNUM_THREADS=64" ^
     "-DCMAKE_INSTALL_PREFIX=%INSTALL_DIRECTORY%"
 if errorlevel 1 goto :failed
+
+findstr /C:"MAX_STACK_ALLOC=%OPENBLAS_MAX_STACK_ALLOC%" "%BUILD_DIRECTORY%\CMakeCache.txt" >nul
+if errorlevel 1 (
+    echo ERROR: MAX_STACK_ALLOC was not recorded in the CMake C compiler flags.
+    goto :failed
+)
 
 cmake --build "%BUILD_DIRECTORY%" --parallel %BUILD_JOBS%
 if errorlevel 1 goto :failed

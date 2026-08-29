@@ -7,4 +7,6 @@ Manually creating release
 6. Create a GitHub release
 
 Using GitHub to automatically create release
-1. Run Release OpenBLAS workflow for <version>
+1. Run the Release COpenBLAS workflow with separate package and OpenBLAS versions.
+   For example, package version 0.3.35 can bundle OpenBLAS version 0.3.34.
+   Currently though they are in sync and should be kept that way if at all possible.

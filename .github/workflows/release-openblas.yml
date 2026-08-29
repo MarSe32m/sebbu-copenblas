@@ -1,10 +1,14 @@
-name: Release OpenBLAS
+name: Release COpenBLAS
 
 on:
   workflow_dispatch:
     inputs:
-      version:
-        description: OpenBLAS version without the leading v (for example 0.3.34)
+      package_version:
+        description: sebbu-copenblas version without v (for example 0.3.35)
+        required: true
+        type: string
+      openblas_version:
+        description: Bundled OpenBLAS version without v (for example 0.3.34)
         required: true
         type: string
       publish:
@@ -17,7 +21,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: openblas-release-${{ inputs.version }}
+  group: copenblas-release-${{ inputs.package_version }}
   cancel-in-progress: false
 
 jobs:
@@ -32,22 +36,28 @@ jobs:
       - name: Validate version, branch, and tags
         shell: bash
         env:
-          VERSION: ${{ inputs.version }}
+          PACKAGE_VERSION: ${{ inputs.package_version }}
+          OPENBLAS_VERSION: ${{ inputs.openblas_version }}
           PUBLISH: ${{ inputs.publish }}
           REF_NAME: ${{ github.ref_name }}
         run: |
           set -euo pipefail
 
-          if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-            echo "::error::Version must look like 0.3.34 (without a leading v)."
+          if [[ ! "$PACKAGE_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::Package version must look like 0.3.35."
+            exit 1
+          fi
+
+          if [[ ! "$OPENBLAS_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::OpenBLAS version must look like 0.3.34."
             exit 1
           fi
 
           if ! git ls-remote --exit-code --tags \
             https://github.com/OpenMathLib/OpenBLAS.git \
-            "refs/tags/v${VERSION}" >/dev/null
+            "refs/tags/v${OPENBLAS_VERSION}" >/dev/null
           then
-            echo "::error::OpenBLAS tag v${VERSION} does not exist upstream."
+            echo "::error::OpenBLAS tag v${OPENBLAS_VERSION} does not exist upstream."
             exit 1
           fi
 
@@ -57,9 +67,9 @@ jobs:
           fi
 
           if [[ "$PUBLISH" == "true" ]] &&
-            git ls-remote --exit-code --tags origin "refs/tags/${VERSION}" >/dev/null 2>&1
+            git ls-remote --exit-code --tags origin "refs/tags/${PACKAGE_VERSION}" >/dev/null 2>&1
           then
-            echo "::notice::Package tag ${VERSION} already exists; the publish job will only allow an idempotent retry."
+            echo "::notice::Package tag ${PACKAGE_VERSION} already exists; the publish job will only allow an idempotent retry."
           fi
 
   build-linux:
@@ -104,7 +114,7 @@ jobs:
       - name: Build in the baseline container
         shell: bash
         env:
-          OPENBLAS_VERSION: v${{ inputs.version }}
+          OPENBLAS_VERSION: v${{ inputs.openblas_version }}
           OPENBLAS_TARGET: ${{ matrix.target }}
           DYNAMIC_ARCH: ${{ matrix.dynamic_arch }}
           ARTIFACT_VARIANT: ${{ matrix.variant }}
@@ -166,7 +176,7 @@ jobs:
       - name: Build with Visual Studio 2026
         shell: cmd
         env:
-          OPENBLAS_VERSION: v${{ inputs.version }}
+          OPENBLAS_VERSION: v${{ inputs.openblas_version }}
           ARTIFACT_BUNDLE_DIR: ${{ github.workspace }}\payload
         run: |
           set "BUILD_JOBS=%NUMBER_OF_PROCESSORS%"
@@ -200,11 +210,13 @@ jobs:
       - name: Create the multi-triple artifact bundle
         shell: bash
         env:
-          VERSION: ${{ inputs.version }}
+          PACKAGE_VERSION: ${{ inputs.package_version }}
+          OPENBLAS_VERSION: ${{ inputs.openblas_version }}
         run: |
           set -euo pipefail
           python3 scripts/package-release.py \
-            --version "$VERSION" \
+            --package-version "$PACKAGE_VERSION" \
+            --openblas-version "$OPENBLAS_VERSION" \
             --payload-root payload \
             --dist-dir prepared/release-assets \
             --package-manifest Package.swift \
@@ -223,18 +235,18 @@ jobs:
           bundle="prepared/release-assets/COpenBLAS.artifactbundle.zip"
           bundle_checksum="$(sha256sum "$bundle" | awk '{print $1}')"
           grep --fixed-strings \
-            "url: \"https://github.com/MarSe32m/sebbu-copenblas/releases/download/${{ inputs.version }}/COpenBLAS.artifactbundle.zip\"" \
+            "url: \"https://github.com/MarSe32m/sebbu-copenblas/releases/download/${{ inputs.package_version }}/COpenBLAS.artifactbundle.zip\"" \
             prepared/Package.swift
           grep --fixed-strings \
             "checksum: \"$bundle_checksum\"" \
             prepared/Package.swift
 
-          python3 - "$bundle" "${{ inputs.version }}" <<'PY'
+          python3 - "$bundle" "${{ inputs.package_version }}" "${{ inputs.openblas_version }}" <<'PY'
           import json
           import sys
           import zipfile
 
-          bundle_path, expected_version = sys.argv[1:]
+          bundle_path, expected_package_version, expected_openblas_version = sys.argv[1:]
           manifest_path = "COpenBLAS.artifactbundle/info.json"
           expected_variants = {
               "openblas-linux-aarch64-glibc2.34",
@@ -248,11 +260,18 @@ jobs:
           with zipfile.ZipFile(bundle_path) as archive:
               names = archive.namelist()
               manifest = json.loads(archive.read(manifest_path))
+              build_info = {
+                  variant: archive.read(
+                      f"COpenBLAS.artifactbundle/{variant}/BUILD-INFO.txt"
+                  ).decode("utf-8").splitlines()
+                  for variant in expected_variants
+              }
 
           version = manifest["artifacts"]["_COpenBLAS"]["version"]
-          if version != expected_version:
+          if version != expected_package_version:
               raise SystemExit(
-                  f"info.json version is {version!r}, expected {expected_version!r}"
+                  "info.json version is "
+                  f"{version!r}, expected {expected_package_version!r}"
               )
 
           present_variants = {
@@ -267,6 +286,23 @@ jobs:
                   "Artifact-bundle payload directories differ from the expected set: "
                   f"{sorted(present_variants)}"
               )
+
+          expected_openblas_line = (
+              f"openblas_version=v{expected_openblas_version}"
+          )
+          for variant, lines in build_info.items():
+              if expected_openblas_line not in lines:
+                  raise SystemExit(
+                      f"{variant}/BUILD-INFO.txt does not contain "
+                      f"{expected_openblas_line!r}"
+                  )
+              if variant.startswith("openblas-windows-") and (
+                  "max_stack_alloc_bytes=2048" not in lines
+              ):
+                  raise SystemExit(
+                      f"{variant}/BUILD-INFO.txt does not enable the "
+                      "2048-byte stack workspace"
+                  )
           PY
 
           cp prepared/Package.swift Package.swift
@@ -275,7 +311,7 @@ jobs:
       - name: Upload prepared release
         uses: actions/upload-artifact@v7
         with:
-          name: prepared-release-${{ inputs.version }}
+          name: prepared-release-${{ inputs.package_version }}
           path: prepared/
           if-no-files-found: error
           retention-days: 3
@@ -296,13 +332,14 @@ jobs:
       - name: Download prepared release
         uses: actions/download-artifact@v8
         with:
-          name: prepared-release-${{ inputs.version }}
+          name: prepared-release-${{ inputs.package_version }}
           path: prepared
 
       - name: Create the release commit and tag
         shell: bash
         env:
-          VERSION: ${{ inputs.version }}
+          PACKAGE_VERSION: ${{ inputs.package_version }}
+          OPENBLAS_VERSION: ${{ inputs.openblas_version }}
         run: |
           set -euo pipefail
 
@@ -314,26 +351,26 @@ jobs:
           git add Package.swift
 
           remote_tag_commit="$(
-            git ls-remote origin "refs/tags/${VERSION}^{}" |
+            git ls-remote origin "refs/tags/${PACKAGE_VERSION}^{}" |
               awk 'NR == 1 { print $1 }'
           )"
           if [[ -z "$remote_tag_commit" ]]; then
             remote_tag_commit="$(
-              git ls-remote origin "refs/tags/${VERSION}" |
+              git ls-remote origin "refs/tags/${PACKAGE_VERSION}" |
                 awk 'NR == 1 { print $1 }'
             )"
           fi
 
           if [[ -n "$remote_tag_commit" ]]; then
             if ! git diff --cached --quiet; then
-              echo "::error::Tag ${VERSION} exists, but the prepared manifest differs from main."
+              echo "::error::Tag ${PACKAGE_VERSION} exists, but the prepared manifest differs from main."
               exit 1
             fi
             if [[ "$remote_tag_commit" != "$(git rev-parse HEAD)" ]]; then
-              echo "::error::Tag ${VERSION} does not point to the current main commit."
+              echo "::error::Tag ${PACKAGE_VERSION} does not point to the current main commit."
               exit 1
             fi
-            echo "Tag ${VERSION} and its release commit already exist; continuing an idempotent release retry."
+            echo "Tag ${PACKAGE_VERSION} and its release commit already exist; continuing an idempotent release retry."
             exit 0
           fi
 
@@ -342,46 +379,48 @@ jobs:
             exit 1
           fi
 
-          git commit -m "Release OpenBLAS ${VERSION} [skip ci]"
-          git tag --annotate "$VERSION" --message "OpenBLAS ${VERSION}"
+          git commit -m "Release COpenBLAS ${PACKAGE_VERSION} (OpenBLAS ${OPENBLAS_VERSION}) [skip ci]"
+          git tag --annotate "$PACKAGE_VERSION" \
+            --message "COpenBLAS ${PACKAGE_VERSION} (OpenBLAS ${OPENBLAS_VERSION})"
 
           # The atomic push prevents a tag-only or branch-only partial update.
-          git push --atomic origin HEAD:main "refs/tags/${VERSION}"
+          git push --atomic origin HEAD:main "refs/tags/${PACKAGE_VERSION}"
 
       - name: Upload and publish GitHub release
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
-          VERSION: ${{ inputs.version }}
+          PACKAGE_VERSION: ${{ inputs.package_version }}
+          OPENBLAS_VERSION: ${{ inputs.openblas_version }}
         run: |
           set -euo pipefail
 
           release_is_draft="$(
-            gh release view "$VERSION" --json isDraft --jq .isDraft 2>/dev/null ||
+            gh release view "$PACKAGE_VERSION" --json isDraft --jq .isDraft 2>/dev/null ||
               true
           )"
 
           if [[ "$release_is_draft" == "false" ]]; then
-            echo "Release ${VERSION} is already published."
+            echo "Release ${PACKAGE_VERSION} is already published."
             exit 0
           elif [[ "$release_is_draft" == "true" ]]; then
-            gh release upload "$VERSION" \
+            gh release upload "$PACKAGE_VERSION" \
               prepared/release-assets/COpenBLAS.artifactbundle.zip \
               prepared/release-assets/BUILD-METADATA.json \
               prepared/release-assets/SHA256SUMS \
               --clobber
-            gh release edit "$VERSION" \
-              --title "OpenBLAS ${VERSION}" \
+            gh release edit "$PACKAGE_VERSION" \
+              --title "COpenBLAS ${PACKAGE_VERSION} (OpenBLAS ${OPENBLAS_VERSION})" \
               --notes-file prepared/release-assets/RELEASE_NOTES.md
           else
-            gh release create "$VERSION" \
+            gh release create "$PACKAGE_VERSION" \
               prepared/release-assets/COpenBLAS.artifactbundle.zip \
               prepared/release-assets/BUILD-METADATA.json \
               prepared/release-assets/SHA256SUMS \
               --verify-tag \
               --draft \
-              --title "OpenBLAS ${VERSION}" \
+              --title "COpenBLAS ${PACKAGE_VERSION} (OpenBLAS ${OPENBLAS_VERSION})" \
               --notes-file prepared/release-assets/RELEASE_NOTES.md
           fi
 
-          gh release edit "$VERSION" --draft=false --latest
+          gh release edit "$PACKAGE_VERSION" --draft=false --latest

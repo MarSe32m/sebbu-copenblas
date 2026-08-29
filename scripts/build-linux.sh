@@ -4,7 +4,7 @@ set -euo pipefail
 readonly SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 readonly REPOSITORY_ROOT="$(cd -- "${SCRIPT_DIR}/.." && pwd)"
 
-: "${OPENBLAS_VERSION:?Set OPENBLAS_VERSION to an upstream tag such as v0.3.34}"
+: "${OPENBLAS_VERSION:?Set OPENBLAS_VERSION to an upstream tag such as v0.3.35}"
 : "${OPENBLAS_TARGET:?Set OPENBLAS_TARGET, for example GENERIC or ARMV8}"
 : "${DYNAMIC_ARCH:?Set DYNAMIC_ARCH to ON or OFF}"
 : "${ARTIFACT_VARIANT:?Set ARTIFACT_VARIANT to the output directory name}"

@@ -75,9 +75,14 @@ VARIANTS = (
 def parse_arguments() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
-        "--version",
+        "--package-version",
         required=True,
-        help="Package/OpenBLAS version without a leading v, for example 0.3.34",
+        help="sebbu-copenblas package version, for example 0.3.35",
+    )
+    parser.add_argument(
+        "--openblas-version",
+        required=True,
+        help="Bundled OpenBLAS version without a leading v, for example 0.3.34",
     )
     parser.add_argument(
         "--payload-root",
@@ -119,9 +124,12 @@ def fail(message: str) -> None:
     raise RuntimeError(message)
 
 
-def validate_version(version: str) -> None:
+def validate_version(name: str, version: str) -> None:
     if not re.fullmatch(r"[0-9]+\.[0-9]+\.[0-9]+", version):
-        fail("Version must contain exactly three numeric components, for example 0.3.34.")
+        fail(
+            f"{name} must contain exactly three numeric components, "
+            "for example 0.3.34."
+        )
 
 
 def prepare_output_directory(path: Path, protected_paths: Iterable[Path]) -> Path:
@@ -382,14 +390,14 @@ def replace_binary_target(manifest: str, version: str, checksum: str) -> str:
     return manifest[:start] + replacement + manifest[end:]
 
 
-def release_notes(version: str) -> str:
+def release_notes(package_version: str, openblas_version: str) -> str:
     rows = "\n".join(
         f"| `{variant.triple}` | `{variant.payload_directory}` |"
         for variant in VARIANTS
     )
-    return f"""# COpenBLAS {version}
+    return f"""# COpenBLAS {package_version}
 
-Prebuilt OpenBLAS `v{version}` static libraries for SwiftPM. All target
+Prebuilt OpenBLAS `v{openblas_version}` static libraries for SwiftPM. All target
 variants are contained in `{ARCHIVE_NAME}`.
 
 | Swift target triple | Artifact-bundle variant |
@@ -399,6 +407,8 @@ variants are contained in `{ARCHIVE_NAME}`.
 All variants are built with `NOFORTRAN=1`, `C_LAPACK=ON`, pthreads enabled,
 OpenMP disabled, and `DYNAMIC_OLDER=OFF`. The x86-64 variants retain
 `DYNAMIC_ARCH=ON` and the AArch64 variants use the ARMv8 baseline.
+The Windows variants use `clang-cl` with `MAX_STACK_ALLOC=2048`, avoiding the
+shared OpenBLAS workspace allocator for small Level-2 operations.
 
 See `SHA256SUMS` and `BUILD-METADATA.json` for release verification details.
 """
@@ -410,12 +420,13 @@ def write_json(path: Path, value: object) -> None:
 
 def main() -> int:
     arguments = parse_arguments()
-    validate_version(arguments.version)
+    validate_version("Package version", arguments.package_version)
+    validate_version("OpenBLAS version", arguments.openblas_version)
 
     payload_root = validate_payload(arguments.payload_root)
     manifest = load_artifact_manifest(
         arguments.artifact_manifest_template,
-        arguments.version,
+        arguments.package_version,
     )
     dist_dir = prepare_output_directory(
         arguments.dist_dir,
@@ -441,10 +452,10 @@ def main() -> int:
     write_json(
         metadata_path,
         {
-            "packageVersion": arguments.version,
+            "packageVersion": arguments.package_version,
             "openBLAS": {
                 "repository": "https://github.com/OpenMathLib/OpenBLAS",
-                "tag": f"v{arguments.version}",
+                "tag": f"v{arguments.openblas_version}",
             },
             "repository": f"https://github.com/{REPOSITORY}",
             "githubActions": {
@@ -460,6 +471,7 @@ def main() -> int:
                 "openMP": False,
                 "threading": True,
                 "dynamicOlder": False,
+                "windowsMaxStackAllocBytes": 2048,
             },
             "variants": [asdict(variant) for variant in VARIANTS],
             "archiveChecksums": {ARCHIVE_NAME: archive_checksum},
@@ -471,7 +483,10 @@ def main() -> int:
     )
 
     notes_path = dist_dir / "RELEASE_NOTES.md"
-    notes_path.write_text(release_notes(arguments.version), encoding="utf-8")
+    notes_path.write_text(
+        release_notes(arguments.package_version, arguments.openblas_version),
+        encoding="utf-8",
+    )
 
     checksummed_assets = sorted(
         [
@@ -489,7 +504,7 @@ def main() -> int:
     source_manifest = arguments.package_manifest.read_text(encoding="utf-8")
     release_manifest = replace_binary_target(
         source_manifest,
-        arguments.version,
+        arguments.package_version,
         archive_checksum,
     )
     output_manifest = arguments.output_package_manifest.resolve()
