@@ -18,6 +18,10 @@ variants are built with `clang-cl` and use `MAX_STACK_ALLOC=2048` so small
 Level-2 operations use stack-local workspaces instead of OpenBLAS's shared
 workspace allocator.
 
+The GNU/Linux variants are built and smoke-tested in an Amazon Linux 2
+environment with glibc 2.26. They support glibc 2.26 and newer. The musl
+variants use the musl 1.2 ABI and do not depend on glibc.
+
 Package versions follow Semantic Versioning independently of the bundled
 OpenBLAS version. Currently the latest package version and OpenBLAS version
 are in sync. However, in the future they might stray away from each other. 

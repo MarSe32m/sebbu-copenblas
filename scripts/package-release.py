@@ -35,13 +35,13 @@ class Variant:
 VARIANTS = (
     Variant(
         identifier="linux-x86_64-gnu",
-        payload_directory="openblas-linux-x86_64-glibc2.34",
+        payload_directory="openblas-linux-x86_64-glibc2.26",
         triple="x86_64-unknown-linux-gnu",
         library_path="lib/libopenblas.a",
     ),
     Variant(
         identifier="linux-aarch64-gnu",
-        payload_directory="openblas-linux-aarch64-glibc2.34",
+        payload_directory="openblas-linux-aarch64-glibc2.26",
         triple="aarch64-unknown-linux-gnu",
         library_path="lib/libopenblas.a",
     ),
@@ -407,6 +407,8 @@ variants are contained in `{ARCHIVE_NAME}`.
 All variants are built with `NOFORTRAN=1`, `C_LAPACK=ON`, pthreads enabled,
 OpenMP disabled, and `DYNAMIC_OLDER=OFF`. The x86-64 variants retain
 `DYNAMIC_ARCH=ON` and the AArch64 variants use the ARMv8 baseline.
+The GNU/Linux variants are built and smoke-tested on glibc 2.26 and support
+glibc 2.26 or newer.
 The Windows variants use `clang-cl` with `MAX_STACK_ALLOC=2048`, avoiding the
 shared OpenBLAS workspace allocator for small Level-2 operations.
 
@@ -471,6 +473,7 @@ def main() -> int:
                 "openMP": False,
                 "threading": True,
                 "dynamicOlder": False,
+                "glibcBaseline": "2.26",
                 "windowsMaxStackAllocBytes": 2048,
             },
             "variants": [asdict(variant) for variant in VARIANTS],

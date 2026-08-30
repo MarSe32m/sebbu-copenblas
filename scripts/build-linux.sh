@@ -25,12 +25,48 @@ if [[ ! "${ARTIFACT_VARIANT}" =~ ^openblas-[a-z0-9._-]+$ ]]; then
     exit 1
 fi
 
+if [[ -n "${GLIBC_BASELINE:-}" &&
+      ! "${GLIBC_BASELINE}" =~ ^[0-9]+\.[0-9]+$ ]]; then
+    echo "ERROR: GLIBC_BASELINE must look like 2.26 when it is set." >&2
+    exit 1
+fi
+
+DETECTED_GLIBC=""
+if [[ -n "${GLIBC_BASELINE:-}" ]]; then
+    DETECTED_GLIBC="$(getconf GNU_LIBC_VERSION 2>/dev/null || true)"
+    if [[ "${DETECTED_GLIBC}" != "glibc ${GLIBC_BASELINE}" ]]; then
+        echo "ERROR: Expected build container glibc ${GLIBC_BASELINE}, got '${DETECTED_GLIBC:-unknown}'." >&2
+        exit 1
+    fi
+    if [[ "${ARTIFACT_VARIANT}" != *"-glibc${GLIBC_BASELINE}" ]]; then
+        echo "ERROR: ARTIFACT_VARIANT must end in -glibc${GLIBC_BASELINE}." >&2
+        exit 1
+    fi
+fi
+readonly DETECTED_GLIBC
+
 if [[ -z "${BUILD_JOBS:-}" ]]; then
     BUILD_JOBS="$(getconf _NPROCESSORS_ONLN 2>/dev/null || echo 1)"
 fi
 
 if [[ ! "${BUILD_JOBS}" =~ ^[1-9][0-9]*$ ]]; then
     echo "ERROR: BUILD_JOBS must be a positive integer." >&2
+    exit 1
+fi
+
+if [[ -n "${CMAKE_COMMAND:-}" ]]; then
+    readonly SELECTED_CMAKE_COMMAND="${CMAKE_COMMAND}"
+elif command -v cmake >/dev/null 2>&1; then
+    readonly SELECTED_CMAKE_COMMAND="cmake"
+elif command -v cmake3 >/dev/null 2>&1; then
+    readonly SELECTED_CMAKE_COMMAND="cmake3"
+else
+    echo "ERROR: Neither cmake nor cmake3 is available." >&2
+    exit 1
+fi
+
+if ! command -v "${SELECTED_CMAKE_COMMAND}" >/dev/null 2>&1; then
+    echo "ERROR: CMAKE_COMMAND '${SELECTED_CMAKE_COMMAND}' was not found." >&2
     exit 1
 fi
 
@@ -57,7 +93,7 @@ git clone \
     https://github.com/OpenMathLib/OpenBLAS.git \
     "${SOURCE_DIRECTORY}"
 
-cmake \
+"${SELECTED_CMAKE_COMMAND}" \
     -S "${SOURCE_DIRECTORY}" \
     -B "${BUILD_DIRECTORY}" \
     -G "${SELECTED_CMAKE_GENERATOR}" \
@@ -83,8 +119,8 @@ cmake \
     -DUSE_THREAD=ON \
     -DNUM_THREADS=512
 
-cmake --build "${BUILD_DIRECTORY}" --parallel "${BUILD_JOBS}"
-cmake --install "${BUILD_DIRECTORY}"
+"${SELECTED_CMAKE_COMMAND}" --build "${BUILD_DIRECTORY}" --parallel "${BUILD_JOBS}"
+"${SELECTED_CMAKE_COMMAND}" --install "${BUILD_DIRECTORY}"
 
 for required_file in \
     "${INSTALL_DIRECTORY}/include/openblas/cblas.h" \
@@ -97,6 +133,38 @@ do
         exit 1
     fi
 done
+
+readonly SMOKE_TEST_BINARY="${WORK_ROOT}/smoke-openblas"
+cc \
+    -std=c11 \
+    -O2 \
+    -I"${INSTALL_DIRECTORY}/include/openblas" \
+    "${SCRIPT_DIR}/smoke-openblas.c" \
+    "${INSTALL_DIRECTORY}/lib/libopenblas.a" \
+    -lm \
+    -lpthread \
+    -ldl \
+    -o "${SMOKE_TEST_BINARY}"
+"${SMOKE_TEST_BINARY}"
+
+SMOKE_TEST_MAX_GLIBC=""
+if [[ -n "${GLIBC_BASELINE:-}" ]]; then
+    SMOKE_TEST_MAX_GLIBC="$(
+        readelf --version-info "${SMOKE_TEST_BINARY}" |
+            sed -n 's/.*Name: GLIBC_\([0-9][0-9.]*\).*/\1/p' |
+            sort -Vu |
+            tail -n 1
+    )"
+    if [[ -z "${SMOKE_TEST_MAX_GLIBC}" ]]; then
+        echo "ERROR: Could not determine the smoke test's glibc requirements." >&2
+        exit 1
+    fi
+    if [[ "$(printf '%s\n%s\n' "${GLIBC_BASELINE}" "${SMOKE_TEST_MAX_GLIBC}" | sort -V | tail -n 1)" != "${GLIBC_BASELINE}" ]]; then
+        echo "ERROR: Smoke test requires glibc ${SMOKE_TEST_MAX_GLIBC}, newer than baseline ${GLIBC_BASELINE}." >&2
+        exit 1
+    fi
+fi
+readonly SMOKE_TEST_MAX_GLIBC
 
 rm -rf -- "${OUT_DIRECTORY}"
 mkdir -p -- "${OUT_DIRECTORY}/include" "${OUT_DIRECTORY}/lib"
@@ -128,7 +196,13 @@ rm -f -- "${OUT_DIRECTORY}/include/lapacke_example_aux.h"
     printf 'dynamic_older=OFF\n'
     printf 'no_fortran=1\n'
     printf 'build_jobs=%s\n' "${BUILD_JOBS}"
+    printf 'cmake_command=%s\n' "${SELECTED_CMAKE_COMMAND}"
     printf 'cmake_generator=%s\n' "${SELECTED_CMAKE_GENERATOR}"
+    if [[ -n "${GLIBC_BASELINE:-}" ]]; then
+        printf 'glibc_baseline=%s\n' "${GLIBC_BASELINE}"
+        printf 'build_libc=%s\n' "${DETECTED_GLIBC}"
+        printf 'smoke_test_max_glibc=%s\n' "${SMOKE_TEST_MAX_GLIBC}"
+    fi
 } > "${OUT_DIRECTORY}/BUILD-INFO.txt"
 
 echo "Staged ${ARTIFACT_VARIANT} at ${OUT_DIRECTORY}"

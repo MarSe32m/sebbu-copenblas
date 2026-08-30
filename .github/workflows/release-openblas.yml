@@ -81,23 +81,26 @@ jobs:
         include:
           - id: linux-x86_64-gnu
             runner: ubuntu-24.04
-            image: rockylinux:9
+            image: public.ecr.aws/amazonlinux/amazonlinux:2
             target: GENERIC
             dynamic_arch: "ON"
-            variant: openblas-linux-x86_64-glibc2.34
+            glibc_baseline: "2.26"
+            variant: openblas-linux-x86_64-glibc2.26
             triple: x86_64-unknown-linux-gnu
           - id: linux-aarch64-gnu
             runner: ubuntu-24.04-arm
-            image: rockylinux:9
+            image: public.ecr.aws/amazonlinux/amazonlinux:2
             target: ARMV8
             dynamic_arch: "OFF"
-            variant: openblas-linux-aarch64-glibc2.34
+            glibc_baseline: "2.26"
+            variant: openblas-linux-aarch64-glibc2.26
             triple: aarch64-unknown-linux-gnu
           - id: linux-x86_64-musl
             runner: ubuntu-24.04
             image: alpine:3.22
             target: GENERIC
             dynamic_arch: "ON"
+            glibc_baseline: ""
             variant: openblas-linux-x86_64-musl1.2
             triple: x86_64-swift-linux-musl
           - id: linux-aarch64-musl
@@ -105,6 +108,7 @@ jobs:
             image: alpine:3.22
             target: ARMV8
             dynamic_arch: "OFF"
+            glibc_baseline: ""
             variant: openblas-linux-aarch64-musl1.2
             triple: aarch64-swift-linux-musl
     runs-on: ${{ matrix.runner }}
@@ -117,6 +121,7 @@ jobs:
           OPENBLAS_VERSION: v${{ inputs.openblas_version }}
           OPENBLAS_TARGET: ${{ matrix.target }}
           DYNAMIC_ARCH: ${{ matrix.dynamic_arch }}
+          GLIBC_BASELINE: ${{ matrix.glibc_baseline }}
           ARTIFACT_VARIANT: ${{ matrix.variant }}
           ARTIFACT_BUNDLE_DIR: /workspace/payload
           BUILD_IMAGE: ${{ matrix.image }}
@@ -131,6 +136,7 @@ jobs:
             --env OPENBLAS_VERSION \
             --env OPENBLAS_TARGET \
             --env DYNAMIC_ARCH \
+            --env GLIBC_BASELINE \
             --env ARTIFACT_VARIANT \
             --env ARTIFACT_BUNDLE_DIR \
             --env BUILD_JOBS \
@@ -139,9 +145,15 @@ jobs:
             /bin/sh -ec '
               if command -v apk >/dev/null 2>&1; then
                 apk add --no-cache bash build-base cmake ninja git perl linux-headers
-              else
+              elif command -v dnf >/dev/null 2>&1; then
                 dnf -y install gcc gcc-c++ make cmake git perl
                 dnf clean all
+              elif command -v yum >/dev/null 2>&1; then
+                yum -y install gcc gcc-c++ make cmake3 git perl binutils
+                yum clean all
+              else
+                echo "ERROR: Unsupported build container: no apk, dnf, or yum." >&2
+                exit 1
               fi
               exec bash scripts/build-linux.sh
             '
@@ -249,9 +261,9 @@ jobs:
           bundle_path, expected_package_version, expected_openblas_version = sys.argv[1:]
           manifest_path = "COpenBLAS.artifactbundle/info.json"
           expected_variants = {
-              "openblas-linux-aarch64-glibc2.34",
+              "openblas-linux-aarch64-glibc2.26",
               "openblas-linux-aarch64-musl1.2",
-              "openblas-linux-x86_64-glibc2.34",
+              "openblas-linux-x86_64-glibc2.26",
               "openblas-linux-x86_64-musl1.2",
               "openblas-windows-aarch64",
               "openblas-windows-x86_64",
@@ -296,6 +308,17 @@ jobs:
                       f"{variant}/BUILD-INFO.txt does not contain "
                       f"{expected_openblas_line!r}"
                   )
+              if "-glibc2.26" in variant:
+                  expected_glibc_lines = {
+                      "glibc_baseline=2.26",
+                      "build_libc=glibc 2.26",
+                  }
+                  missing_glibc_lines = expected_glibc_lines.difference(lines)
+                  if missing_glibc_lines:
+                      raise SystemExit(
+                          f"{variant}/BUILD-INFO.txt is missing glibc baseline "
+                          f"metadata: {sorted(missing_glibc_lines)}"
+                      )
               if variant.startswith("openblas-windows-") and (
                   "max_stack_alloc_bytes=2048" not in lines
               ):

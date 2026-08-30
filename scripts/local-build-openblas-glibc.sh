@@ -13,13 +13,13 @@ fi
 
 # OpenBLAS 0.3.33 was released Apr 23, 2026.
 # Override with:
-#   OPENBLAS_VERSION=0.3.32 ./build-openblas-glibc.sh x86_64
+#   OPENBLAS_VERSION=0.3.32 ./local-build-openblas-glibc.sh x86_64
 OPENBLAS_VERSION="${OPENBLAS_VERSION:-0.3.33}"
 
 # Compile-time maximum number of OpenBLAS worker threads.
 # For 192 physical cores and 384 SMT threads, 512 gives headroom.
 # Override with:
-#   OPENBLAS_MAX_THREADS=384 ./build-openblas-glibc.sh x86_64
+#   OPENBLAS_MAX_THREADS=384 ./local-build-openblas-glibc.sh x86_64
 OPENBLAS_MAX_THREADS="${OPENBLAS_MAX_THREADS:-512}"
 
 build_one_arch() {
@@ -35,19 +35,19 @@ build_one_arch() {
   case "$arch" in
     x86_64)
       docker_platform="linux/amd64"
-      base_image="quay.io/pypa/manylinux_2_34_x86_64:latest"
+      base_image="public.ecr.aws/amazonlinux/amazonlinux:2"
       swift_triple="x86_64-unknown-linux-gnu"
       extra_openblas_flags="DYNAMIC_OLDER=1"
-      out_dir="${OUT_DIR:-$PWD/openblas-linux-x86_64-glibc2.34}"
-      image_name="openblas-x86_64-glibc234-builder:${OPENBLAS_VERSION}"
+      out_dir="${OUT_DIR:-$PWD/openblas-linux-x86_64-glibc2.26}"
+      image_name="openblas-x86_64-glibc226-builder:${OPENBLAS_VERSION}"
       ;;
     aarch64)
       docker_platform="linux/arm64"
-      base_image="quay.io/pypa/manylinux_2_34_aarch64:latest"
+      base_image="public.ecr.aws/amazonlinux/amazonlinux:2"
       swift_triple="aarch64-unknown-linux-gnu"
       extra_openblas_flags="TARGET=ARMV8"
-      out_dir="${OUT_DIR:-$PWD/openblas-linux-aarch64-glibc2.34}"
-      image_name="openblas-aarch64-glibc234-builder:${OPENBLAS_VERSION}"
+      out_dir="${OUT_DIR:-$PWD/openblas-linux-aarch64-glibc2.26}"
+      image_name="openblas-aarch64-glibc226-builder:${OPENBLAS_VERSION}"
       ;;
   esac
 
@@ -77,6 +77,8 @@ RUN yum -y install \
     && yum clean all
 
 WORKDIR /build
+
+RUN test "$(getconf GNU_LIBC_VERSION)" = "glibc 2.26"
 
 RUN git clone --depth 1 \
       --branch "v${OPENBLAS_VERSION}" \

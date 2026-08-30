@@ -6,19 +6,19 @@
             "version": "0.3.34",
             "variants": [
                 {
-                    "path": "openblas-linux-x86_64-glibc2.34/lib/libopenblas.a",
+                    "path": "openblas-linux-x86_64-glibc2.26/lib/libopenblas.a",
                     "supportedTriples": ["x86_64-unknown-linux-gnu"],
                     "staticLibraryMetadata": {
-                        "headerPaths": ["openblas-linux-x86_64-glibc2.34/include"],
-                        "moduleMapPath": "openblas-linux-x86_64-glibc2.34/include/module.modulemap"
+                        "headerPaths": ["openblas-linux-x86_64-glibc2.26/include"],
+                        "moduleMapPath": "openblas-linux-x86_64-glibc2.26/include/module.modulemap"
                     }
                 },
                 {
-                    "path": "openblas-linux-aarch64-glibc2.34/lib/libopenblas.a",
+                    "path": "openblas-linux-aarch64-glibc2.26/lib/libopenblas.a",
                     "supportedTriples": ["aarch64-unknown-linux-gnu"],
                     "staticLibraryMetadata": {
-                        "headerPaths": ["openblas-linux-aarch64-glibc2.34/include"],
-                        "moduleMapPath": "openblas-linux-aarch64-glibc2.34/include/module.modulemap"
+                        "headerPaths": ["openblas-linux-aarch64-glibc2.26/include"],
+                        "moduleMapPath": "openblas-linux-aarch64-glibc2.26/include/module.modulemap"
                     }
                 },
                 {
