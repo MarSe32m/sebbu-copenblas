@@ -16,13 +16,13 @@ concurrency:
 
 jobs:
   native:
-    name: Native (${{ matrix.os }})
+    name: Native (${{ matrix.os }}, Swift ${{ matrix.swift }})
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, windows-latest, windows-11-arm, macos-latest]
-        swift: ['6.3.2']
+        swift: ['6.3.2', '6.4.1']
 
     steps:
       - name: Check out repository
@@ -49,13 +49,13 @@ jobs:
         run: swift run -c release
 
   static-linux:
-    name: Static Linux (${{ matrix.sdk }})
+    name: Static Linux (${{ matrix.sdk }}, Swift ${{ matrix.swift }})
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
         sdk: ['x86_64-swift-linux-musl', 'aarch64-swift-linux-musl']
-        swift: ['6.3.2']
+        swift: ['6.3.2', '6.4.1']
 
     steps:
       - name: Check out repository
